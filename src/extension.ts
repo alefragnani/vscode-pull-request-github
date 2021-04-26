@@ -109,7 +109,7 @@ async function init(
 		});
 	}
 	const folderManagers = repositories.map(
-		repository => new FolderRepositoryManager(repository, telemetry, git, credentialStore),
+		repository => new FolderRepositoryManager(context, repository, telemetry, git, credentialStore),
 	);
 	context.subscriptions.push(...folderManagers);
 
@@ -139,7 +139,7 @@ async function init(
 
 	git.onDidOpenRepository(repo => {
 		const disposable = repo.state.onDidChange(() => {
-			const newFolderManager = new FolderRepositoryManager(repo, telemetry, git, credentialStore);
+			const newFolderManager = new FolderRepositoryManager(context, repo, telemetry, git, credentialStore);
 			reposManager.insertFolderManager(newFolderManager);
 			const newReviewManager = new ReviewManager(
 				context,
@@ -184,13 +184,14 @@ async function init(
 
 	await vscode.commands.executeCommand('setContext', 'github:initialized', true);
 
+	const experimentationService = await createExperimentationService(context, telemetry);
+	await experimentationService.initializePromise;
+	await experimentationService.isCachedFlightEnabled('githubaa');
+
 	/* __GDPR__
 		"startup" : {}
 	*/
 	telemetry.sendTelemetryEvent('startup');
-
-	const experimentationService = await createExperimentationService(context, telemetry);
-	experimentationService.isCachedFlightEnabled('githubaa');
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<GitApiImpl> {

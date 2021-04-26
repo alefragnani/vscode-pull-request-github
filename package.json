@@ -27,38 +27,12 @@
 	],
 	"browser": "./dist/browser/extension",
 	"main": "./dist/extension",
+	"workspaceTrust": { "request": "never" },
 	"contributes": {
 		"configuration": {
 			"type": "object",
 			"title": "GitHub Pull Requests",
 			"properties": {
-				"githubPullRequests.telemetry.enabled": {
-					"type": "boolean",
-					"default": true,
-					"description": "Enable usage data and errors to be sent to a GitHub online service"
-				},
-				"githubPullRequests.hosts": {
-					"type": "array",
-					"default": [],
-					"markdownDescription": "List of host credentials. For example, \"githubPullRequests.hosts\": [ { \"host\": \"https://github.com\", \"token\": \"GITHUB TOKEN\" } ]",
-					"items": {
-						"type": "object",
-						"properties": {
-							"host": {
-								"type": "string",
-								"description": "The host name of the GitHub server (for eg., 'https://github.com')"
-							},
-							"username": {
-								"type": "string",
-								"description": "The username to access GitHub (optional)"
-							},
-							"token": {
-								"type": "string",
-								"description": "GitHub access token with the following scopes: read:user, user:email, repo, write:discussion"
-							}
-						}
-					}
-				},
 				"githubPullRequests.pullRequestTitle": {
 					"deprecationMessage": "The pull request title now uses the same defaults as GitHub, and can be edited before create.",
 					"type": "string",
@@ -207,35 +181,6 @@
 					],
 					"default": "ask",
 					"description": "Default handler for terminal links."
-				},
-				"telemetry.optout": {
-					"type": "boolean",
-					"default": false,
-					"deprecationMessage": "The setting `telemetry.optout` has been deprecated in favor of `githubPullRequests.telemetry.enabled`.",
-					"description": "Disable usage data and errors to be sent to a GitHub online service"
-				},
-				"github.hosts": {
-					"type": "array",
-					"default": [],
-					"deprecationMessage": "The setting `github.hosts` has been deprecated in favor of `githubPullRequests.hosts`.",
-					"description": "List of host credentials. For example, \"github.hosts\": [ { \"host\": \"https://github.com\", \"token\": \"GITHUB TOKEN\" } ]",
-					"items": {
-						"type": "object",
-						"properties": {
-							"host": {
-								"type": "string",
-								"description": "The host name of the GitHub server (for eg., 'https://github.com')"
-							},
-							"username": {
-								"type": "string",
-								"description": "The username to access GitHub (optional)"
-							},
-							"token": {
-								"type": "string",
-								"description": "GitHub access token with the following scopes: read:user, user:email, repo, write:discussion"
-							}
-						}
-					}
 				},
 				"githubIssues.ignoreMilestones": {
 					"type": "array",
@@ -614,11 +559,6 @@
 				"enablement": "!commentIsEmpty"
 			},
 			{
-				"command": "pr.deleteReview",
-				"title": "Delete Review",
-				"category": "GitHub Pull Requests"
-			},
-			{
 				"command": "pr.editComment",
 				"title": "Edit Comment",
 				"category": "GitHub Pull Requests",
@@ -640,12 +580,6 @@
 				"title": "Delete Comment",
 				"category": "GitHub Pull Requests",
 				"icon": "$(trash)"
-			},
-			{
-				"command": "pr.finishReview",
-				"title": "Finish Review",
-				"category": "GitHub Pull Requests",
-				"enablement": "!commentIsEmpty"
 			},
 			{
 				"command": "pr.resolveReviewThread",
@@ -672,6 +606,23 @@
 				"title": "Refresh",
 				"category": "GitHub Pull Requests",
 				"icon": "$(refresh)"
+			},
+			{
+				"command": "pr.markFileAsViewed",
+				"title": "Mark File As Viewed",
+				"category": "GitHub Pull Requests",
+				"icon": "$(check)"
+			},
+			{
+				"command": "pr.unmarkFileAsViewed",
+				"title": "Mark File As Not Viewed",
+				"category": "GitHub Pull Requests",
+				"icon": "$(eye-closed)"
+			},
+			{
+				"command": "pr.openReview",
+				"title": "Open Review",
+				"category": "GitHub Pull Requests"
 			},
 			{
 				"command": "issue.createIssueFromSelection",
@@ -972,10 +923,6 @@
 					"when": "false"
 				},
 				{
-					"command": "pr.deleteReview",
-					"when": "false"
-				},
-				{
 					"command": "pr.editComment",
 					"when": "false"
 				},
@@ -992,7 +939,7 @@
 					"when": "false"
 				},
 				{
-					"command": "pr.finishReview",
+					"command": "pr.openReview",
 					"when": "false"
 				},
 				{
@@ -1291,6 +1238,16 @@
 				{
 					"command": "issue.editQuery",
 					"when": "view == issues:github && viewItem == query"
+				},
+				{
+					"command": "pr.markFileAsViewed",
+					"when": "view =~ /(pr|prStatus):github/ && viewItem =~ /filechange(.*):unviewed/",
+					"group": "inline"
+				},
+				{
+					"command": "pr.unmarkFileAsViewed",
+					"when": "view =~ /(pr|prStatus):github/ && viewItem =~ /filechange(.*):viewed/",
+					"group": "inline"
 				}
 			],
 			"editor/title": [
@@ -1321,86 +1278,76 @@
 				{
 					"command": "pr.createComment",
 					"group": "inline@1",
-					"when": "commentController =~ /browse/ && prInDraft"
+					"when": "commentController =~ /^github-browse/ && prInDraft"
 				},
 				{
 					"command": "pr.createComment",
 					"group": "inline@1",
-					"when": "commentController =~ /review/ && reviewInDraftMode"
+					"when": "commentController =~ /^github-review/ && reviewInDraftMode"
 				},
 				{
 					"command": "pr.createSingleComment",
 					"group": "inline@1",
-					"when": "commentController =~ /browse/ && !prInDraft"
+					"when": "commentController =~ /^github-browse/ && !prInDraft"
 				},
 				{
 					"command": "pr.createSingleComment",
 					"group": "inline@1",
-					"when": "commentController =~ /review/ && !reviewInDraftMode"
+					"when": "commentController =~ /^github-review/ && !reviewInDraftMode"
 				},
 				{
 					"command": "pr.startReview",
 					"group": "inline@2",
-					"when": "commentController =~ /browse/ && !prInDraft"
+					"when": "commentController =~ /^github-browse/ && !prInDraft"
 				},
 				{
 					"command": "pr.startReview",
 					"group": "inline@2",
-					"when": "commentController =~ /review/ && !reviewInDraftMode"
+					"when": "commentController =~ /^github-review/ && !reviewInDraftMode"
 				},
 				{
-					"command": "pr.deleteReview",
-					"group": "inline@2",
-					"when": "commentController =~ /browse/ && prInDraft"
-				},
-				{
-					"command": "pr.deleteReview",
-					"group": "inline@2",
-					"when": "commentController =~ /review/ && reviewInDraftMode"
-				},
-				{
-					"command": "pr.finishReview",
+					"command": "pr.openReview",
 					"group": "inline@3",
-					"when": "commentController =~ /browse/ && prInDraft"
+					"when": "commentController =~ /^github-browse/ && prInDraft"
 				},
 				{
-					"command": "pr.finishReview",
+					"command": "pr.openReview",
 					"group": "inline@3",
-					"when": "commentController =~ /review/ && reviewInDraftMode"
+					"when": "commentController =~ /^github-review/ && reviewInDraftMode"
 				},
 				{
 					"command": "pr.resolveReviewThread",
 					"group": "inline@3",
-					"when": "commentController =~ /browse|review/ && commentThread == canResolve"
+					"when": "commentController =~ /^github-(browse|review)/ && commentThread == canResolve"
 				},
 				{
 					"command": "pr.unresolveReviewThread",
 					"group": "inline@3",
-					"when": "commentController =~ /browse|review/ && commentThread == canUnresolve"
+					"when": "commentController =~ /^github-(browse|review)/ && commentThread == canUnresolve"
 				}
 			],
 			"comments/comment/title": [
 				{
 					"command": "pr.editComment",
 					"group": "inline@1",
-					"when": "commentController =~ /^(browse|review)/ && comment =~ /canEdit/"
+					"when": "commentController =~ /^github-(browse|review)/ && comment =~ /canEdit/"
 				},
 				{
 					"command": "pr.deleteComment",
 					"group": "inline@2",
-					"when": "commentController =~ /^(browse|review)/ && comment =~ /canDelete/"
+					"when": "commentController =~ /^github-(browse|review)/ && comment =~ /canDelete/"
 				}
 			],
 			"comments/comment/context": [
 				{
 					"command": "pr.cancelEditComment",
 					"group": "inline@1",
-					"when": "commentController =~ /^(browse|review)/"
+					"when": "commentController =~ /^github-(browse|review)/"
 				},
 				{
 					"command": "pr.saveComment",
 					"group": "inline@2",
-					"when": "commentController =~ /^(browse|review)/"
+					"when": "commentController =~ /^github-(browse|review)/"
 				}
 			],
 			"editor/context/copy": [

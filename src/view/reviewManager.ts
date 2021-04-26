@@ -461,7 +461,7 @@ export class ReviewManager {
 			);
 
 			const changedItem = new GitFileChangeNode(
-				this.changesInPrDataProvider.view,
+				this.changesInPrDataProvider,
 				this._folderRepoManager,
 				pr,
 				change.status,
@@ -483,6 +483,7 @@ export class ReviewManager {
 		try {
 			this._comments = await pr.getReviewComments();
 			await pr.initializeReviewThreadCache();
+			await pr.getPullRequestFileViewState();
 			const activeComments = this._comments.filter(comment => comment.position);
 			const outdatedComments = this._comments.filter(comment => !comment.position);
 
@@ -510,7 +511,7 @@ export class ReviewManager {
 					const oldComments = commentsForFile[fileName];
 					const uri = vscode.Uri.file(nodePath.join(`commit~${commit.substr(0, 8)}`, fileName));
 					const obsoleteFileChange = new GitFileChangeNode(
-						this.changesInPrDataProvider.view,
+						this.changesInPrDataProvider,
 						this._folderRepoManager,
 						pr,
 						GitChangeType.MODIFY,
@@ -551,6 +552,7 @@ export class ReviewManager {
 
 	private async registerCommentController() {
 		this._reviewCommentController = new ReviewCommentController(
+			this,
 			this._folderRepoManager,
 			this._repository,
 			this._localFileChanges,
@@ -800,6 +802,22 @@ export class ReviewManager {
 		}
 
 		this._createPullRequestHelper.create(this._context.extensionUri, this._folderRepoManager, compareBranch);
+	}
+
+	public async openDescription(): Promise<void> {
+		const pullRequest = this._folderRepoManager.activePullRequest;
+		if (!pullRequest) {
+			return;
+		}
+
+		const descriptionNode = this.changesInPrDataProvider.getDescriptionNode(this._folderRepoManager);
+		await openDescription(
+			this._context,
+			this._telemetry,
+			pullRequest,
+			descriptionNode,
+			this._folderRepoManager,
+		);
 	}
 
 	get isCreatingPullRequest() {

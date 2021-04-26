@@ -16,7 +16,7 @@ import { getInMemPRContentProvider } from '../inMemPRContentProvider';
 import { DescriptionNode } from './descriptionNode';
 import { DirectoryTreeNode } from './directoryTreeNode';
 import { InMemFileChangeNode, RemoteFileChangeNode } from './fileChangeNode';
-import { TreeNode } from './treeNode';
+import { TreeNode, TreeNodeParent } from './treeNode';
 
 export class PRNode extends TreeNode implements vscode.CommentingRangeProvider {
 	static ID = 'PRNode';
@@ -38,7 +38,7 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider {
 	}
 
 	constructor(
-		public parent: TreeNode | vscode.TreeView<TreeNode>,
+		public parent: TreeNodeParent,
 		private _folderReposManager: FolderRepositoryManager,
 		public pullRequestModel: PullRequestModel,
 		private _isLocal: boolean,
@@ -66,6 +66,7 @@ export class PRNode extends TreeNode implements vscode.CommentingRangeProvider {
 			}
 
 			await this.pullRequestModel.initializeReviewThreadCache();
+			await this.pullRequestModel.getPullRequestFileViewState();
 			this._fileChanges = await this.resolveFileChanges();
 
 			if (!this._inMemPRContentProvider) {

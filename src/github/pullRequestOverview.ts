@@ -27,6 +27,12 @@ import { IssueOverviewPanel } from './issueOverview';
 import { PullRequestModel } from './pullRequestModel';
 import { isInCodespaces, parseReviewers } from './utils';
 
+type MilestoneQuickPickItem = vscode.QuickPickItem & { id: string; milestone: IMilestone };
+
+function isMilestoneQuickPickItem(x: vscode.QuickPickItem | MilestoneQuickPickItem): x is MilestoneQuickPickItem {
+	return !!(x as MilestoneQuickPickItem).id && !!(x as MilestoneQuickPickItem).milestone;
+}
+
 export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestModel> {
 	public static ID: string = 'PullRequestOverviewPanel';
 	/**
@@ -80,6 +86,12 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 		}
 	}
 
+	public static scrollToReview(): void {
+		if (this.currentPanel) {
+			this.currentPanel._postMessage({ command: 'pr.scrollToPendingReview' });
+		}
+	}
+
 	protected constructor(
 		extensionUri: vscode.Uri,
 		column: vscode.ViewColumn,
@@ -105,12 +117,14 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 			this._disposables,
 		);
 
-		this._disposables.push(folderRepositoryManager.onDidMergePullRequest(_ => {
-			this._postMessage({
-				command: 'update-state',
-				state: GithubItemStateEnum.Merged,
-			});
-		}));
+		this._disposables.push(
+			folderRepositoryManager.onDidMergePullRequest(_ => {
+				this._postMessage({
+					command: 'update-state',
+					state: GithubItemStateEnum.Merged,
+				});
+			}),
+		);
 	}
 
 	registerFolderRepositoryListener() {
@@ -173,7 +187,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 					pullRequest.head &&
 					!pullRequest.base.repositoryCloneUrl.equals(pullRequest.head.repositoryCloneUrl);
 
-				const showMergeOnGitHub = isCrossRepository && isInCodespaces();
+				const continueOnGitHub = isCrossRepository && isInCodespaces();
 
 				Logger.debug('pr.initialize', PullRequestOverviewPanel.ID);
 				this._postMessage({
@@ -209,8 +223,8 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 						isIssue: false,
 						milestone: pullRequest.milestone,
 						assignees: pullRequest.assignees,
-						showMergeOnGitHub,
-						isAuthor: currentUser.login === pullRequest.author.login
+						continueOnGitHub,
+						isAuthor: currentUser.login === pullRequest.author.login,
 					},
 				});
 			})
@@ -431,8 +445,17 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 		try {
 			async function getMilestoneOptions(
 				folderRepoManager: FolderRepositoryManager,
-			): Promise<(vscode.QuickPickItem & { id: string; milestone: IMilestone })[]> {
-				return (await folderRepoManager.getMilestones()).items.map(result => {
+			): Promise<(MilestoneQuickPickItem | vscode.QuickPickItem)[]> {
+				const milestones = await folderRepoManager.getMilestones();
+				if (!milestones.items.length) {
+					return [
+						{
+							label: 'No milestones created for this repository.',
+						},
+					];
+				}
+
+				return milestones.items.map(result => {
 					return {
 						label: result.milestone.title,
 						id: result.milestone.id,
@@ -448,7 +471,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				},
 			);
 
-			if (milestoneToAdd) {
+			if (milestoneToAdd && isMilestoneQuickPickItem(milestoneToAdd)) {
 				await this._item.updateMilestone(milestoneToAdd.id);
 				this._replyMessage(message, {
 					added: milestoneToAdd.milestone,
