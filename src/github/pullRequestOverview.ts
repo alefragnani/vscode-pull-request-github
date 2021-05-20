@@ -151,6 +151,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 			pullRequestModel.getStatusChecks(),
 			pullRequestModel.getReviewRequests(),
 			this._folderRepositoryManager.getPullRequestRepositoryAccessAndMergeMethods(pullRequestModel),
+			this._folderRepositoryManager.getBranchNameForPullRequest(pullRequestModel),
 		])
 			.then(result => {
 				const [
@@ -160,6 +161,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 					status,
 					requestedReviewers,
 					repositoryAccess,
+					branchInfo,
 				] = result;
 				if (!pullRequest) {
 					throw new Error(
@@ -209,8 +211,11 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 						state: pullRequest.state,
 						events: timelineEvents,
 						isCurrentlyCheckedOut: isCurrentlyCheckedOut,
-						base: (pullRequest.base && pullRequest.base.label) || 'UNKNOWN',
-						head: (pullRequest.head && pullRequest.head.label) || 'UNKNOWN',
+						isRemoteBaseDeleted: pullRequest.isRemoteBaseDeleted,
+						base: pullRequest.base.label,
+						isRemoteHeadDeleted: pullRequest.isRemoteHeadDeleted,
+						isLocalHeadDeleted: !branchInfo,
+						head: pullRequest.head.label,
 						repositoryDefaultBranch: defaultBranch,
 						canEdit: canEdit,
 						hasWritePermission,
@@ -616,13 +621,13 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 
 	private async deleteBranch(message: IRequestMessage<any>) {
 		const branchInfo = await this._folderRepositoryManager.getBranchNameForPullRequest(this._item);
-		const actions: (vscode.QuickPickItem & { type: 'upstream' | 'local' | 'remote' })[] = [];
+		const actions: (vscode.QuickPickItem & { type: 'upstream' | 'local' | 'remote' | 'suspend' })[] = [];
 
 		if (this._item.isResolved()) {
 			const branchHeadRef = this._item.head.ref;
 
 			const isDefaultBranch = this._repositoryDefaultBranch === this._item.head.ref;
-			if (!isDefaultBranch) {
+			if (!isDefaultBranch && !this._item.isRemoteHeadDeleted) {
 				actions.push({
 					label: `Delete remote branch ${this._item.remote.remoteName}/${branchHeadRef}`,
 					description: `${this._item.remote.normalizedHost}/${this._item.remote.owner}/${this._item.remote.repositoryName}`,
@@ -655,6 +660,13 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 			}
 		}
 
+		if (vscode.env.remoteName === 'codespaces') {
+			actions.push({
+				label: 'Suspend Codespace',
+				type: 'suspend'
+			});
+		}
+
 		if (!actions.length) {
 			vscode.window.showWarningMessage(
 				`There is no longer an upstream or local branch for Pull Request #${this._item.number}`,
@@ -671,6 +683,8 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 			ignoreFocusOut: true,
 		});
 
+		const deletedBranchTypes: string[] = [];
+
 		if (selectedActions) {
 			const isBranchActive = this._item.equals(this._folderRepositoryManager.activePullRequest);
 
@@ -678,6 +692,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 				switch (action.type) {
 					case 'upstream':
 						await this._folderRepositoryManager.deleteBranch(this._item);
+						deletedBranchTypes.push(action.type);
 						return this._folderRepositoryManager.repository.fetch({ prune: true });
 					case 'local':
 						if (isBranchActive) {
@@ -695,9 +710,14 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 							}
 							await this._folderRepositoryManager.repository.checkout(this._repositoryDefaultBranch);
 						}
-						return await this._folderRepositoryManager.repository.deleteBranch(branchInfo!.branch, true);
+						await this._folderRepositoryManager.repository.deleteBranch(branchInfo!.branch, true);
+						return deletedBranchTypes.push(action.type);
 					case 'remote':
+						deletedBranchTypes.push(action.type);
 						return this._folderRepositoryManager.repository.removeRemote(branchInfo!.remote!);
+					case 'suspend':
+						deletedBranchTypes.push(action.type);
+						return vscode.commands.executeCommand('github.codespaces.disconnectSuspend');
 				}
 			});
 
@@ -708,6 +728,7 @@ export class PullRequestOverviewPanel extends IssueOverviewPanel<PullRequestMode
 
 			this._postMessage({
 				command: 'pr.deleteBranch',
+				branchTypes: deletedBranchTypes
 			});
 		} else {
 			this._replyMessage(message, {

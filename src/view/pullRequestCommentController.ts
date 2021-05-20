@@ -368,13 +368,18 @@ export class PullRequestCommentController implements CommentHandler, CommentReac
 
 	// #region Review
 	public async startReview(thread: GHPRCommentThread, input: string): Promise<void> {
+		const hasExistingComments = thread.comments.length;
 		const temporaryCommentId = this.optimisticallyAddComment(thread, input, true);
 
 		try {
-			const fileName = this.gitRelativeRootPath(thread.uri.path);
-			const side = this.getCommentSide(thread);
-			this._pendingCommentThreadAdds.push(thread);
-			await this.pullRequestModel.createReviewThread(input, fileName, thread.range.start.line + 1, side);
+			if (!hasExistingComments) {
+				const fileName = this.gitRelativeRootPath(thread.uri.path);
+				const side = this.getCommentSide(thread);
+				this._pendingCommentThreadAdds.push(thread);
+				await this.pullRequestModel.createReviewThread(input, fileName, thread.range.start.line + 1, side);
+			} else {
+				await this.reply(thread, input, false);
+			}
 
 			this.setContextKey(true);
 		} catch (e) {
